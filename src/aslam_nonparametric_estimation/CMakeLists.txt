@@ -1,0 +1,2 @@
+add_subdirectory(bsplines)
+add_subdirectory(aslam_splines)

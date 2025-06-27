@@ -1,0 +1,2 @@
+add_subdirectory(ethz_apriltag2)
+add_subdirectory(kalibr_errorterms)
