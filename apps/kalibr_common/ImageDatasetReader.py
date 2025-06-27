@@ -3,7 +3,6 @@ import cv2
 import rosbag
 import os
 import numpy as np
-import pylab as pl
 import aslam_cv as acv
 import sm
 

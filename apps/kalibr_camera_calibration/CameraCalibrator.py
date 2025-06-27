@@ -13,10 +13,6 @@ from matplotlib.backends.backend_pdf import PdfPages
 import mpl_toolkits.mplot3d.axes3d as p3
 import cv2
 import numpy as np
-import pylab as pl
-import math
-import gc
-import sys
 
 np.set_printoptions(suppress=True, precision=8)
 

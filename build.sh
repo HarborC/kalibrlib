@@ -4,10 +4,8 @@ echo "BASE_DIR: ${BASE_DIR}"
 
 cd ${BASE_DIR}
 
-rm -rf build
-rm -rf install
 mkdir -p build && cd build
 clear
 cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="../install" .. 
-ninja -j4
+ninja -j2
 sudo ninja install

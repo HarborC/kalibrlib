@@ -2,7 +2,6 @@ import rosbag
 import os
 import sm
 import numpy as np
-import pylab as pl
 import aslam_cv as acv
 
 class BagImuDatasetReaderIterator(object):

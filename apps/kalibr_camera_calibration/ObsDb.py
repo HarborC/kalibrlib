@@ -4,9 +4,6 @@ import aslam_backend as aopt
 
 import numpy as np
 import collections
-import igraph
-import itertools
-import sys
 
 #simple data structure that stores all observations for a multi-cam system
 #and can approx. sync observations
