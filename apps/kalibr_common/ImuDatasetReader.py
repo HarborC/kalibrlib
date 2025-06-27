@@ -1,4 +1,5 @@
-import rosbag
+from rosbags.highlevel import AnyReader
+from pathlib import Path
 import os
 import sm
 import numpy as np
@@ -27,40 +28,35 @@ class BagImuDatasetReader(object):
         self.bagfile = bagfile
         self.topic = imutopic
         self.perform_synchronization = perform_synchronization
-        self.bag = rosbag.Bag(bagfile)
+        self.bag = AnyReader([Path(self.bagfile)])
+        self.bag.open()
         self.uncompress = None
         if imutopic is None:
             raise RuntimeError("Please pass in a topic name referring to the imu stream in the bag file\n{0}".format(self.bag));
 
         # Get the message indices
-        conx = self.bag._get_connections(topics=imutopic)
-        indices = self.bag._get_indexes(conx)
+        self.imu_messages = list(self.bag.messages(connections=self.bag.topics[self.topic].connections))
         
         try:
-            self.index = next(indices)
+            self.index = np.arange(len(self.imu_messages))
         except:
             raise RuntimeError("Could not find topic {0} in {1}.".format(imutopic, self.bagfile))
         
         self.indices = np.arange(len(self.index))
         
         #sort the indices by header.stamp
-        self.indices = self. sortByTime(self.indices)
+        self.indices = self.sortByTime(self.indices)
         
-        #go through the bag and remove the indices outside the timespan [bag_start_time, bag_end_time]
+        #go through the file and remove the indices outside the timespan [bag_start_time, bag_end_time]
         if bag_from_to:
             self.indices = self.truncateIndicesFromTime(self.indices, bag_from_to)
             
     #sort the ros messegaes by the header time not message time
     def sortByTime(self, indices):
-        self.timestamp_corrector = sm.DoubleTimestampCorrector()
         timestamps=list()
         for idx in self.indices:
-            topic, data, stamp = self.bag._read_message(self.index[idx].position)
-            timestamp = data.header.stamp.secs*1e9 + data.header.stamp.nsecs
+            connection, timestamp, rawdata = self.imu_messages[self.index[idx]]
             timestamps.append(timestamp)
-            if self.perform_synchronization:
-                self.timestamp_corrector.correctTimestamp(data.header.stamp.to_sec(), \
-                                                          stamp.to_sec())
         
         sorted_tuples = sorted(zip(timestamps, indices))
         sorted_indices = [tuple_value[1] for tuple_value in sorted_tuples]
@@ -70,8 +66,8 @@ class BagImuDatasetReader(object):
         #get the timestamps
         timestamps=list()
         for idx in self.indices:
-            topic, data, stamp = self.bag._read_message(self.index[idx].position)
-            timestamp = data.header.stamp.secs + data.header.stamp.nsecs/1.0e9
+            connection, timestamp, rawdata = self.imu_messages[self.index[idx]]
+            timestamp = timestamp * 1e-9
             timestamps.append(timestamp)
 
         bagstart = min(timestamps)
@@ -96,7 +92,7 @@ class BagImuDatasetReader(object):
         return valid_indices
     
     def __iter__(self):
-        # Reset the bag reading
+        # Reset the file reading
         return self.readDataset()
     
     def readDataset(self):
@@ -105,18 +101,21 @@ class BagImuDatasetReader(object):
     def readDatasetShuffle(self):
         indices = self.indices
         np.random.shuffle(indices)
-        return BagImuDatasetReaderIterator(self,indices)
+        return BagImuDatasetReaderIterator(self, indices)
 
     def numMessages(self):
         return len(self.indices)
     
     def getMessage(self,idx):
-        topic, data, stamp = self.bag._read_message(self.index[idx].position)
-        if self.perform_synchronization:
-            timestamp = acv.Time(self.timestamp_corrector.getLocalTime(data.header.stamp.to_sec()))
+        connection, timestamp, rawdata = self.imu_messages[self.index[idx]]
+        secs = int(timestamp*1e-9)
+        nsecs = int(timestamp - secs*1e9)
+        timestamp = acv.Time(secs, nsecs)
+        if connection.msgtype == 'sensor_msgs/msg/Imu':
+            data = self.bag.deserialize(rawdata, connection.msgtype)
+            omega = np.array([data.angular_velocity.x, data.angular_velocity.y, data.angular_velocity.z])
+            alpha = np.array([data.linear_acceleration.x, data.linear_acceleration.y, data.linear_acceleration.z])
+            
+            return (timestamp, omega, alpha)
         else:
-            timestamp = acv.Time( data.header.stamp.secs, data.header.stamp.nsecs )
-        omega = np.array( [data.angular_velocity.x, data.angular_velocity.y, data.angular_velocity.z])
-        alpha = np.array( [data.linear_acceleration.x, data.linear_acceleration.y, data.linear_acceleration.z] )
-        
-        return (timestamp, omega, alpha)
+            raise RuntimeError("The topic {0} is not sensor_msgs/msg/Imu.".format(imutopic))

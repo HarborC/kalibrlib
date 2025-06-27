@@ -54,8 +54,10 @@ def extractCornersFromDataset(dataset, detector, multithreading=False, numProces
                 
             plist=list()
             for pidx in range(0, numProcesses):
-                detector_copy = copy.copy(detector)
-                p = multiprocessing.Process(target=multicoreExtractionWrapper, args=(detector_copy, taskq, resultq, clearImages, noTransformation, ))
+                # detector_copy = copy.copy(detector)
+                # p = multiprocessing.Process(target=multicoreExtractionWrapper, args=(detector_copy, taskq, resultq, clearImages, noTransformation, ))
+                # TODO: copy.copy
+                p = multiprocessing.Process(target=multicoreExtractionWrapper, args=(detector, taskq, resultq, clearImages, noTransformation, ))
                 p.start()
                 plist.append(p)
             

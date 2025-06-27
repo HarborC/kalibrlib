@@ -1,11 +1,10 @@
-import cv_bridge
+from rosbags.highlevel import AnyReader
+from pathlib import Path
 import cv2
-import rosbag
 import os
 import numpy as np
 import aslam_cv as acv
 import sm
-
 
 class BagImageDatasetReaderIterator(object):
   def __init__(self, dataset, indices=None):
@@ -34,19 +33,17 @@ class BagImageDatasetReader(object):
     self.bagfile = bagfile
     self.topic = imagetopic
     self.perform_synchronization = perform_synchronization
-    self.bag = rosbag.Bag(bagfile)
+    self.bag = AnyReader([Path(self.bagfile)])
+    self.bag.open()
     self.uncompress = None
     if imagetopic is None:
       raise RuntimeError(
           "Please pass in a topic name referring to the image stream in the bag file\n{0}".format(self.bag))
 
-    self.CVB = cv_bridge.CvBridge()
-    # Get the message indices
-    conx = self.bag._get_connections(topics=imagetopic)
-    indices = self.bag._get_indexes(conx)
+    self.image_messages = list(self.bag.messages(connections=self.bag.topics[self.topic].connections))
 
     try:
-      self.index = next(indices)
+      self.index = np.arange(len(self.image_messages))
     except:
       raise RuntimeError("Could not find topic {0} in {1}.".format(imagetopic, self.bagfile))
 
@@ -68,12 +65,8 @@ class BagImageDatasetReader(object):
     self.timestamp_corrector = sm.DoubleTimestampCorrector()
     timestamps = list()
     for idx in self.indices:
-      topic, data, stamp = self.bag._read_message(self.index[idx].position)
-      timestamp = data.header.stamp.secs * 1e9 + data.header.stamp.nsecs
+      connection, timestamp, rawdata = self.image_messages[self.index[idx]]
       timestamps.append(timestamp)
-      if self.perform_synchronization:
-        self.timestamp_corrector.correctTimestamp(data.header.stamp.to_sec(),
-                                                  stamp.to_sec())
 
     sorted_tuples = sorted(zip(timestamps, indices))
     sorted_indices = [tuple_value[1] for tuple_value in sorted_tuples]
@@ -83,8 +76,8 @@ class BagImageDatasetReader(object):
     # get the timestamps
     timestamps = list()
     for idx in self.indices:
-      topic, data, stamp = self.bag._read_message(self.index[idx].position)
-      timestamp = data.header.stamp.secs + data.header.stamp.nsecs / 1.0e9
+      connection, timestamp, rawdata = self.image_messages[self.index[idx]]
+      timestamp = timestamp * 1e-9
       timestamps.append(timestamp)
 
     bagstart = min(timestamps)
@@ -96,8 +89,7 @@ class BagImageDatasetReader(object):
     if bag_from_to[0] < 0.0:
       sm.logWarn("Bag start time of {0} s is smaller 0".format(bag_from_to[0]))
     if bag_from_to[1] > baglength:
-      sm.logWarn("Bag end time of {0} s is bigger than the total length of {1} s".format(
-          bag_from_to[1], baglength))
+      sm.logWarn("Bag end time of {0} s is bigger than the total length of {1} s".format(bag_from_to[1], baglength))
 
     # find the valid timestamps
     valid_indices = []
@@ -118,8 +110,8 @@ class BagImageDatasetReader(object):
     timestamp_last = -1
     valid_indices = []
     for idx in self.indices:
-      topic, data, stamp = self.bag._read_message(self.index[idx].position)
-      timestamp = data.header.stamp.secs + data.header.stamp.nsecs / 1.0e9
+      connection, timestamp, rawdata = self.image_messages[self.index[idx]]
+      timestamp = timestamp * 1e-9
       if timestamp_last < 0.0:
         timestamp_last = timestamp
         valid_indices.append(idx)
@@ -127,8 +119,7 @@ class BagImageDatasetReader(object):
       if (timestamp - timestamp_last) >= 1.0 / freq:
         timestamp_last = timestamp
         valid_indices.append(idx)
-    sm.logWarn(
-      "BagImageDatasetReader: truncated {0} / {1} images (frequency)".format(len(indices) - len(valid_indices), len(indices)))
+    sm.logWarn("BagImageDatasetReader: truncated {0} / {1} images (frequency)".format(len(indices) - len(valid_indices), len(indices)))
     return valid_indices
 
   def __iter__(self):
@@ -146,55 +137,68 @@ class BagImageDatasetReader(object):
   def numImages(self):
     return len(self.indices)
 
-  def getImage(self, idx):
-    topic, data, stamp = self.bag._read_message(self.index[idx].position)
-    if self.perform_synchronization:
-      timestamp = acv.Time(self.timestamp_corrector.getLocalTime(
-          data.header.stamp.to_sec()))
+  def imgmsg_to_cv2(self, img_msg):
+    height = img_msg.height
+    width = img_msg.width
+    encoding = img_msg.encoding
+    data = img_msg.data
+
+    if encoding == "8UC1" or encoding == "mono8":
+        dtype = np.uint8
+        channels = 1
+    elif encoding == "8UC3" or encoding == "bgr8" or encoding == "rgb8":
+        dtype = np.uint8
+        channels = 3
+    elif encoding == "8UC4" or encoding == "bgra8":
+        dtype = np.uint8
+        channels = 4
+    elif encoding == "16UC1" or encoding == "mono16":
+        dtype = np.uint16
+        channels = 1
+    elif encoding.startswith("bayer_"):
+        dtype = np.uint8
+        channels = 1
     else:
-      timestamp = acv.Time(data.header.stamp.secs,
-                           data.header.stamp.nsecs)
-    if data._type == 'mv_cameras/ImageSnappyMsg':
-      if self.uncompress is None:
-        from snappy import uncompress
-        self.uncompress = uncompress
-      img_data = np.reshape(self.uncompress(np.fromstring(
-          data.data, dtype='uint8')), (data.height, data.width), order="C")
-    elif data._type == 'sensor_msgs/CompressedImage':
-      # compressed images only have either mono or BGR normally (png and jpeg)
-      # https://github.com/ros-perception/vision_opencv/blob/906d326c146bd1c6fbccc4cd1268253890ac6e1c/cv_bridge/src/cv_bridge.cpp#L480-L506
-      img_data = np.array(self.CVB.compressed_imgmsg_to_cv2(data))
+        raise ValueError(f"Unsupported encoding: {encoding}")
+
+    image_np = np.frombuffer(data, dtype=dtype)
+    img_shape = (height, width) if channels == 1 else (height, width, channels)
+    return image_np.reshape(img_shape)
+
+  def getImage(self, idx):
+    connection, timestamp, rawdata = self.image_messages[self.index[idx]]
+    # print(timestamp)
+    secs = int(timestamp*1e-9)
+    nsecs = int(timestamp - secs*1e9)
+    timestamp = acv.Time(secs, nsecs)
+
+    if connection.msgtype == 'sensor_msgs/msg/CompressedImage':
+      compressed_msg = self.bag.deserialize(rawdata, connection.msgtype)
+      np_arr = np.frombuffer(compressed_msg.data, dtype=np.uint8)
+      img_data = cv2.imdecode(np_arr, cv2.IMREAD_UNCHANGED)
       if len(img_data.shape) > 2 and img_data.shape[2] == 3:
         img_data = cv2.cvtColor(img_data, cv2.COLOR_BGR2GRAY)
-    elif data._type == 'sensor_msgs/Image':
-      if data.encoding == "16UC1" or data.encoding == "mono16":
-        image_16u = np.array(self.CVB.imgmsg_to_cv2(data))
-        img_data = (image_16u / 256).astype("uint8")
-      elif data.encoding == "8UC1" or data.encoding == "mono8":
-        img_data = np.array(self.CVB.imgmsg_to_cv2(data))
-      elif data.encoding == "8UC3" or data.encoding == "bgr8":
-        img_data = np.array(self.CVB.imgmsg_to_cv2(data))
-        img_data = cv2.cvtColor(img_data, cv2.COLOR_BGR2GRAY)
-      elif data.encoding == "rgb8":
-        img_data = np.array(self.CVB.imgmsg_to_cv2(data))
-        img_data = cv2.cvtColor(img_data, cv2.COLOR_RGB2GRAY)
-      elif data.encoding == "8UC4" or data.encoding == "bgra8":
-        img_data = np.array(self.CVB.imgmsg_to_cv2(data))
-        img_data = cv2.cvtColor(img_data, cv2.COLOR_BGRA2GRAY)
-      # bayes encodings conversions from
-      # https://github.com/ros-perception/image_pipeline/blob/6caf51bd4484ae846cd8a199f7a6a4b060c6373a/image_proc/src/libimage_proc/processor.cpp#L70
-      elif data.encoding == "bayer_rggb8":
-        img_data = np.array(self.CVB.imgmsg_to_cv2(data))
-        img_data = cv2.cvtColor(img_data, cv2.COLOR_BAYER_BG2GRAY)
-      elif data.encoding == "bayer_bggr8":
-        img_data = np.array(self.CVB.imgmsg_to_cv2(data))
-        img_data = cv2.cvtColor(img_data, cv2.COLOR_BAYER_RG2GRAY)
-      elif data.encoding == "bayer_gbrg8":
-        img_data = np.array(self.CVB.imgmsg_to_cv2(data))
-        img_data = cv2.cvtColor(img_data, cv2.COLOR_BAYER_GR2GRAY)
-      elif data.encoding == "bayer_grbg8":
-        img_data = np.array(self.CVB.imgmsg_to_cv2(data))
-        img_data = cv2.cvtColor(img_data, cv2.COLOR_BAYER_GB2GRAY)
+    elif connection.msgtype == 'sensor_msgs/msg/Image':
+      msg = self.bag.deserialize(rawdata, connection.msgtype)
+      cv_image = self.imgmsg_to_cv2(msg)
+      if msg.encoding in ["16UC1", "mono16"]:
+        img_data = (cv_image / 256).astype(np.uint8)
+      elif msg.encoding in ["8UC1", "mono8"]:
+        img_data = cv_image
+      elif msg.encoding in ["8UC3", "bgr8"]:
+        img_data = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+      elif msg.encoding == "rgb8":
+        img_data = cv2.cvtColor(cv_image, cv2.COLOR_RGB2GRAY)
+      elif msg.encoding in ["8UC4", "bgra8"]:
+        img_data = cv2.cvtColor(cv_image, cv2.COLOR_BGRA2GRAY)
+      elif msg.encoding == "bayer_rggb8":
+        img_data = cv2.cvtColor(cv_image, cv2.COLOR_BAYER_BG2GRAY)
+      elif msg.encoding == "bayer_bggr8":
+        img_data = cv2.cvtColor(cv_image, cv2.COLOR_BAYER_RG2GRAY)
+      elif msg.encoding == "bayer_gbrg8":
+        img_data = cv2.cvtColor(cv_image, cv2.COLOR_BAYER_GR2GRAY)
+      elif msg.encoding == "bayer_grbg8":
+        img_data = cv2.cvtColor(cv_image, cv2.COLOR_BAYER_GB2GRAY)
       else:
         raise RuntimeError(
             "Unsupported Image Encoding: '{}'\nSupported are: "
