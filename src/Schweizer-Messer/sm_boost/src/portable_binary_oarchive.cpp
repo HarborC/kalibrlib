@@ -9,7 +9,13 @@
 //  See http://www.boost.org for updates, documentation, and revision history.
 
 #include <ostream>
-#include <boost/detail/endian.hpp>
+#include <boost/version.hpp>
+
+#if BOOST_VERSION < 107400
+#  include <boost/detail/endian.hpp>
+#else
+#  include <boost/predef/other/endian.h>
+#endif
 #include <boost/portable_binary_oarchive.hpp>
 
 namespace boost {

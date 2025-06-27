@@ -9,6 +9,9 @@ function(add_python_export_library TARGET_NAME)
     set(BOOST_COMPONENTS)
   endif()
 
+  string(REGEX MATCH "^[0-9]+\\.[0-9]+" PYTHON_VERSION_SHORT "${PYTHONLIBS_VERSION_STRING}")
+  string(REPLACE "." "" PYTHON_VERSION_NUM ${PYTHON_VERSION_SHORT})
+
   if(PYTHONLIBS_VERSION_STRING VERSION_LESS 3)
     find_package(Boost QUIET)
     if(Boost_VERSION LESS 106700)
@@ -17,7 +20,7 @@ function(add_python_export_library TARGET_NAME)
       list(APPEND BOOST_COMPONENTS python27)
     endif()
   else()
-    list(APPEND BOOST_COMPONENTS python38)
+    list(APPEND BOOST_COMPONENTS python${PYTHON_VERSION_NUM})
   endif()
 
   find_package(Boost REQUIRED COMPONENTS ${BOOST_COMPONENTS})

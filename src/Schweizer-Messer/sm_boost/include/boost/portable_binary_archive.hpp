@@ -28,7 +28,13 @@
 #endif
 
 #include <boost/archive/basic_archive.hpp>
-#include <boost/detail/endian.hpp>
+#include <boost/version.hpp>
+
+#if BOOST_VERSION < 107400
+#  include <boost/detail/endian.hpp>
+#else
+#  include <boost/predef/other/endian.h>
+#endif
 
 
 namespace boost {
