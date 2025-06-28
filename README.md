@@ -6,9 +6,9 @@ sudo apt install python3-wxgtk4.0 python3-numpy
 ```
 
 ```
-python kalibr_calibrate_cameras --target /home/gpcv/Data3/CJG/Projects/ThirdParty/kalibr/build/aprilgrid.yaml \
+python kalibr_calibrate_cameras --target /home/cat/projects/data/aprilgrid.yaml \
  	--models pinhole-radtan pinhole-radtan --topics /camera/left /camera/right \
- 	--bag /home/gpcv/Data3/CJG/Projects/ThirdParty/kalibr/build/camera_calib.bag \
+ 	--bag /home/cat/projects/data/camera_calib.bag \
  	--bag-freq 5.0
 ```
 
