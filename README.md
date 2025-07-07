@@ -33,7 +33,7 @@ sh build.sh
 执行以下脚本前，请根据实际数据修改 --bag 参数（即 rosbag 文件路径）：
 ```
 cd kalibrlib
-sh run_calibrate_cameras.sh
+bash run_calibrate_cameras.sh
 ```
 此脚本将自动调用标定流程，完成各相机的内参与畸变参数估计。
 
@@ -45,6 +45,6 @@ sh run_calibrate_cameras.sh
 - --bag：包含图像与 IMU 数据的 rosbag 路径
 ```
 cd kalibrlib
-sh run_calibrate_imu_camera.sh
+bash run_calibrate_imu_camera.sh
 ```
 该脚本将运行相机与 IMU 的时间对齐与外参估计过程

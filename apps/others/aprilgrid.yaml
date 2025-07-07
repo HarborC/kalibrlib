@@ -1,7 +1,5 @@
-#example for aprilgrid
-target_type: 'aprilgrid' #gridtype
-tagCols: 6                  #number of apriltags
-tagRows: 6                  #number of apriltags
-tagSize: 0.0275              #size of apriltag, edge to edge [m]
-tagSpacing: 0.3             #ratio of space between tags to tagSize
-                              #example: tagSize=2m, spacing=0.5m --> tagSpacing=0.25[-]
+target_type: aprilgrid
+tagCols: 6
+tagRows: 6
+tagSize: 0.0275
+tagSpacing: 0.3
