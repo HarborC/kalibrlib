@@ -13,7 +13,7 @@ echo "开始录制数据，按 Ctrl+C 停止录制..."
 )
 trap - INT  # 恢复
 
-source ~/rosbags_env/bin/activate
+source ~/calib_env/bin/activate
 
 cd ${BASE_DIR}/apps
 python gene_rosbag.py --root_dir ../../../calib_data/camera_calib

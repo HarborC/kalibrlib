@@ -16,7 +16,7 @@ echo "开始录制数据，按 Ctrl+C 停止录制..."
 )
 trap - INT  # 恢复
 
-source ~/rosbags_env/bin/activate
+source ~/calib_env/bin/activate
 
 cd ${BASE_DIR}/apps
 echo "开始生成 ROS bag 文件..."
