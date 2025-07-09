@@ -23,5 +23,4 @@ export PYTHONPATH=\$PYTHONPATH:${BASE_DIR}/install/lib
 
 python kalibr_calibrate_cameras --target ${BASE_DIR}/apps/others/aprilgrid.yaml \
  	--models pinhole-radtan pinhole-radtan --topics /camera/left /camera/right \
- 	--bag ../../../calib_data/camera_calib/camera_calib.bag \
- 	--bag-freq 5.0
+ 	--bag ../../../calib_data/camera_calib/camera_calib.bag
